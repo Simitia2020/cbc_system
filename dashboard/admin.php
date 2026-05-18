@@ -1,11 +1,12 @@
 <?php
 session_start();
-include("../includes/sidebar.php");
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
     header("Location: ../index.php");
     exit();
 }
+
+include("../includes/sidebar.php");
 
 // Get statistics
 $total_students = $conn->query("SELECT COUNT(*) as count FROM students")->fetch_assoc()['count'];

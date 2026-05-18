@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: cbc-system
+    runtime: docker
+    repo: https://github.com/Simitia2020/cbc_system
+    branch: main
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "3306"
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASS
+        sync: false

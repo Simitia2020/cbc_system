@@ -1,15 +1,145 @@
 <?php
 session_start();
+include("../config/db.php");
 
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../index.php");
+$admin_authenticated = isset($_SESSION['user_id'], $_SESSION['role']) && $_SESSION['role'] === 'admin';
+$login_error = '';
+$message = '';
+$error = '';
+
+if (!$admin_authenticated && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_login'])) {
+    $login_input = trim($_POST['login_input'] ?? '');
+    $password = $_POST['password'] ?? '';
+
+    if ($login_input === '' || $password === '') {
+        $login_error = 'Please enter your admin credentials.';
+    } else {
+        $stmt = $conn->prepare("SELECT * FROM users WHERE (national_id = ? OR email = ?) AND role = 'admin' LIMIT 1");
+        $stmt->bind_param("ss", $login_input, $login_input);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result && $result->num_rows === 1) {
+            $user = $result->fetch_assoc();
+            if (($user['status'] ?? '') !== 'approved') {
+                $login_error = 'Admin account is not approved.';
+            } elseif (!password_verify($password, $user['password'])) {
+                $login_error = 'Invalid admin password.';
+            } else {
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['full_name'] = $user['full_name'];
+                $_SESSION['national_id'] = $user['national_id'];
+                $_SESSION['role'] = $user['role'];
+                $_SESSION['email'] = $user['email'];
+                header("Location: admin.php");
+                exit();
+            }
+        } else {
+            $login_error = 'Admin account not found.';
+        }
+    }
+}
+
+if (!$admin_authenticated) {
+    ?>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Admin Login - CBC Kenya</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: Arial, sans-serif;
+                background: linear-gradient(135deg, #145a32, #0b8f47);
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 20px;
+            }
+            .card {
+                width: 100%;
+                max-width: 460px;
+                background: #fff;
+                border-radius: 14px;
+                box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+                overflow: hidden;
+            }
+            .head {
+                background: #00a651;
+                color: #fff;
+                padding: 28px;
+                text-align: center;
+            }
+            .head h1 { font-size: 30px; margin-bottom: 6px; }
+            .head p { font-size: 14px; opacity: 0.95; }
+            .body { padding: 24px; }
+            label { display: block; margin: 8px 0; color: #333; font-weight: 600; }
+            input {
+                width: 100%;
+                padding: 12px;
+                border: 1px solid #ccc;
+                border-radius: 8px;
+                margin-bottom: 14px;
+                font-size: 15px;
+            }
+            button {
+                width: 100%;
+                border: 0;
+                border-radius: 8px;
+                background: #00a651;
+                color: #fff;
+                padding: 13px;
+                font-size: 16px;
+                font-weight: 700;
+                cursor: pointer;
+            }
+            .error {
+                background: #f8d7da;
+                color: #842029;
+                border: 1px solid #f5c2c7;
+                border-radius: 8px;
+                padding: 10px;
+                margin-bottom: 12px;
+            }
+            .hint { margin-top: 14px; font-size: 13px; color: #555; text-align: center; }
+            .hint a { color: #0b8f47; text-decoration: none; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="head">
+                <h1>Admin Portal</h1>
+                <p>CBC Kenya Management</p>
+            </div>
+            <div class="body">
+                <?php if ($login_error): ?>
+                    <div class="error"><?= htmlspecialchars($login_error) ?></div>
+                <?php endif; ?>
+
+                <form method="POST">
+                    <input type="hidden" name="admin_login" value="1">
+                    <label>Admin National ID or Email</label>
+                    <input type="text" name="login_input" required>
+
+                    <label>Password</label>
+                    <input type="password" name="password" required>
+
+                    <button type="submit">Login as Admin</button>
+                </form>
+
+                <div class="hint">Not an admin? <a href="../index.php">Go to main login</a></div>
+            </div>
+        </div>
+    </body>
+    </html>
+    <?php
     exit();
 }
 
 include("../includes/sidebar.php");
-
-$message = '';
-$error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['user_id'])) {
     $target_user_id = intval($_POST['user_id']);
@@ -37,7 +167,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['use
     }
 }
 
-// Get statistics
 $total_students = $conn->query("SELECT COUNT(*) as count FROM students")->fetch_assoc()['count'];
 $total_teachers = $conn->query("SELECT COUNT(*) as count FROM users WHERE role='teacher'")->fetch_assoc()['count'];
 $total_parents = $conn->query("SELECT COUNT(*) as count FROM users WHERE role='parent'")->fetch_assoc()['count'];
@@ -56,22 +185,22 @@ $pending_users = $conn->query("SELECT id, full_name, national_id, email, role, c
         <h2 style="font-size: 36px;"><?= $total_students ?></h2>
         <p>Total Students</p>
     </div>
-    
+
     <div style="background: linear-gradient(135deg, #2196F3, #1976D2); color: white; padding: 25px; border-radius: 12px;">
         <h2 style="font-size: 36px;"><?= $total_teachers ?></h2>
         <p>Total Teachers</p>
     </div>
-    
+
     <div style="background: linear-gradient(135deg, #FF9800, #F57C00); color: white; padding: 25px; border-radius: 12px;">
         <h2 style="font-size: 36px;"><?= $total_parents ?></h2>
         <p>Total Parents</p>
     </div>
-    
+
     <div style="background: linear-gradient(135deg, #9C27B0, #7B1FA2); color: white; padding: 25px; border-radius: 12px;">
         <h2 style="font-size: 36px;"><?= $total_assessments ?></h2>
         <p>Assessments Recorded</p>
     </div>
-    
+
     <div style="background: linear-gradient(135deg, #f44336, #d32f2f); color: white; padding: 25px; border-radius: 12px;">
         <h2 style="font-size: 36px;"><?= $total_assignments ?></h2>
         <p>Teacher Assignments</p>
@@ -84,19 +213,19 @@ $pending_users = $conn->query("SELECT id, full_name, national_id, email, role, c
 </div>
 
 <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-    <h3 style="color: #00a651; margin-bottom: 20px;">⚡ Quick Actions</h3>
+    <h3 style="color: #00a651; margin-bottom: 20px;">Quick Actions</h3>
     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px;">
         <a href="admin_add_user.php" style="display: block; padding: 15px; background: #00a651; color: white; text-decoration: none; border-radius: 8px; text-align: center;">
-            ➕ Add User/Student
+            Add User/Student
         </a>
         <a href="view_users.php" style="display: block; padding: 15px; background: #2196F3; color: white; text-decoration: none; border-radius: 8px; text-align: center;">
-            👥 View All Users
+            View All Users
         </a>
         <a href="assign_teacher.php" style="display: block; padding: 15px; background: #FF9800; color: white; text-decoration: none; border-radius: 8px; text-align: center;">
-            📚 Assign Teacher to Grade
+            Assign Teacher to Grade
         </a>
         <a href="teacher_assignments.php" style="display: block; padding: 15px; background: #9C27B0; color: white; text-decoration: none; border-radius: 8px; text-align: center;">
-            📋 View All Assignments
+            View All Assignments
         </a>
     </div>
 </div>
